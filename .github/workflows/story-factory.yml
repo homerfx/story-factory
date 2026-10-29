@@ -1,0 +1,74 @@
+name: Story Factory
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"    # every 30 minutes
+    - cron: "41 6 1,15 * *"   # keep-alive: GitHub switches schedules off after 60 days with no repo activity
+  workflow_dispatch: {}
+
+concurrency:
+  group: story-factory
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.event.schedule != '41 6 1,15 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Restore memory
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data/state.db
+            data/posted.txt
+          key: factory-memory-${{ github.run_id }}
+          restore-keys: factory-memory-
+
+      - name: Run the factory
+        run: python run.py
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Save memory
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/state.db
+            data/posted.txt
+          key: factory-memory-${{ github.run_id }}
+
+  keepalive:
+    if: github.event.schedule == '41 6 1,15 * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tiny commit so GitHub keeps the schedule on
+        run: |
+          date -u > keepalive.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add keepalive.txt
+          git commit -m "keep-alive"
+          git push
