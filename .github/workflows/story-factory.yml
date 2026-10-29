@@ -1,11 +1,5 @@
 name: Story Factory
 
-on:
-  schedule:
-    - cron: "7,37 * * * *"    # every 30 minutes
-    - cron: "41 6 1,15 * *"   # keep-alive: GitHub switches schedules off after 60 days with no repo activity
-  workflow_dispatch: {}
-
 concurrency:
   group: story-factory
   cancel-in-progress: false
