@@ -1,0 +1,5 @@
+requests>=2.32
+urllib3>=2.6.0
+feedparser>=6.0
+PyYAML>=6.0
+tzdata>=2024.1

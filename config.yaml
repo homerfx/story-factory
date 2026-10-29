@@ -1,0 +1,356 @@
+# ===================== Story Factory settings =====================
+# Edit freely. Lines starting with # are notes.
+
+timezone: Europe/Vilnius
+loop_minutes: 30            # minutes between runs on a server or your PC (GitHub uses the schedule in its workflow file)
+run_budget_minutes: 12      # each run stops itself after this long, so runs (every 30 min on GitHub) never pile up
+collect_share: 0.45         # part of the run spent searching; the rest is for the AI checks
+max_age_hours: 72           # "fresh" means published within this many hours (archive digging ignores this)
+
+# --- how much the AI does per run (keeps you inside the free limits) ---
+max_screen_per_run: 600     # headlines quick-screened per run (the rest wait for the next run)
+screen_threshold: 7         # quick-screen score needed for the deep check
+max_deep_per_run: 40        # stories deep-checked per run
+post_threshold: 7           # deep-check score needed to post in a lane channel
+top_threshold: 9            # 9-10 go to #top-picks instead
+max_posts_per_run: 40
+max_posts_per_lane_per_day: 60
+pitched_skip_strength: 0.75 # how close to an already-pitched story counts as "already used" (0-1)
+fetch_articles: true        # read the full article/Reddit comments before the deep check (better facts, more AI tokens)
+
+# --- files ---
+state_path: data/state.db
+rules_path: rules.md
+posted_path: data/posted.txt
+last_run_path: data/last_run.json
+exclude_paths:
+  - data/exclude.txt
+
+# --- AI: tried in order; when one runs out of free uses for the day, the next takes over ---
+ai:
+  providers: [claude, groq, cerebras, gemini, openrouter]       # deep check order (the smart, careful check)
+  # The quick screen reads hundreds of headlines a run, so it goes to the free providers with the biggest daily
+  # limits first. Claude is last so it's only paid for when every free one has run out.
+  screen_providers: [cerebras, gemini, groq, openrouter, claude]
+  screen_batch_size: 30
+
+providers:
+  groq:                      # free. Key: https://console.groq.com/keys
+    base_url: https://api.groq.com/openai/v1
+    key_env: GROQ_API_KEY
+    screen_model: llama-3.1-8b-instant
+    deep_model: llama-3.3-70b-versatile
+  cerebras:                  # free backup. Key: https://cloud.cerebras.ai
+    base_url: https://api.cerebras.ai/v1
+    key_env: CEREBRAS_API_KEY
+    screen_model: llama3.1-8b
+    deep_model: llama-3.3-70b
+  gemini:                    # free backup. Key: https://aistudio.google.com/apikey
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    key_env: GEMINI_API_KEY
+    screen_model: gemini-2.5-flash-lite
+    deep_model: gemini-2.5-flash
+    extra_body:
+      reasoning_effort: "none"   # stops Gemini's hidden "thinking" from eating the whole reply
+  openrouter:                # free backup (models ending in :free). Key: https://openrouter.ai/keys
+    base_url: https://openrouter.ai/api/v1
+    key_env: OPENROUTER_API_KEY
+    screen_model: meta-llama/llama-3.3-70b-instruct:free
+    deep_model: meta-llama/llama-3.3-70b-instruct:free
+  ollama:                    # free on your own machine (needs Ollama installed); add "ollama" to the list above
+    type: ollama
+    base_url: http://localhost:11434/v1
+    screen_model: llama3.1:8b
+    deep_model: llama3.1:8b
+  claude:                    # optional paid upgrade (smarter judging); add "claude" first in the list above
+    type: anthropic
+    key_env: ANTHROPIC_API_KEY
+    screen_model: claude-haiku-4-5-20251001
+    deep_model: claude-haiku-4-5-20251001
+
+# --- Discord (the bot creates the channel by itself on its first run) ---
+discord:
+  bot_name: Tyler
+  # ONE channel for every story (and the daily report). The bot creates it in your server on its first run;
+  # if a channel with this exact name already exists, it uses that one. Rename it here any time.
+  # Leave it empty ("") to go back to one channel per lane (the settings below).
+  one_channel: "📚│story-ideas"
+  daily_report: true         # false = no daily report message
+  report_hour: 10            # local time for the daily report
+  feedback_days: 7           # how far back to read 👍/👎/⭐ (the bot's own starter reactions never count)
+  feedback_pages: 30         # 100 cards per page
+  # only used when one_channel is empty:
+  category: "STORY FACTORY"
+  top_channel: "🔥│top-picks"
+  picked_channel: "⭐│picked"
+  report_channel: "📊│daily-report"
+  other_channel: "🗂│other-good-stories"
+
+# =====================================================================
+# LANES: built from what made @tylerrstories' outliers go viral (Oct 2026).
+# Each lane = its own search words + a label on the card (and its own channel if one_channel is empty).
+# =====================================================================
+lanes:
+  unfair-adults:
+    channel: "😤│kid-vs-unfair-adults"
+    describe: >-
+      A kid gets punished, arrested, mocked, blamed or banned by a teacher, principal, cop, coach, Karen or
+      parent, often for something tiny or for doing something GOOD, and it flips at the end.
+      Channel proof: arrested for drawing on her desk (4.4x), in trouble for winning a race (3.7x),
+      Karen called cops on kids playing basketball (2.2x), evil teacher made kids fight with swords (2.3x).
+    queries:
+      - '"arrested for" student school'
+      - '"suspended for" student'
+      - '"got in trouble for" kid'
+      - '"expelled for" student'
+      - 'student punished for helping'
+      - 'teacher fired after student video'
+      - 'Karen called police on kids'
+      - 'kid banned from for'
+      - 'school apologizes after student'
+      - 'police called on child for'
+  kid-heroes:
+    channel: "🦸│kid-heroes"
+    describe: >-
+      A kid (best if nobody expected it: the quiet kid, the late kid, the little one) saves people:
+      a classmate, a parent, a whole school or beach. Kid heroes beat adult heroes by far.
+      Channel proof: boy saved his whole school by being late (5.5x), girl saved the whole beach (4.4x),
+      the quiet kid saved a boy's life (3.9x). Adult firefighter/lifeguard saves flopped (0.3-0.4x).
+    queries:
+      - '"year-old" saves'
+      - '"year-old boy" hero'
+      - '"year-old girl" hero'
+      - 'student saves classmate choking'
+      - 'kid saved mom called 911'
+      - 'boy saved drowning'
+      - 'girl saved brother'
+      - 'child hero honored'
+      - 'kid saved family fire'
+  body-mysteries:
+    channel: "🧬│kid-body-mysteries"
+    describe: >-
+      A kid with a bizarre but real body or medical mystery: something found inside them, a one-in-a-million
+      condition, a strange symptom nobody could explain. Simple to understand, no hard science.
+      Channel proof: 526 teeth (4.0x), lived his whole life in a bubble (3.8x), girl crying blood (2.8x),
+      born with gray hair and wrinkles (2.4x), blue-skinned family (3.6x).
+    queries:
+      - 'rare condition girl doctors'
+      - 'rare condition boy doctors baffled'
+      - '"doctors found" inside boy'
+      - '"doctors found" inside girl'
+      - 'girl allergic to'
+      - 'boy swallowed'
+      - 'medical mystery child'
+      - '"one in a million" condition kid'
+      - 'child born with rare'
+  evil-protectors:
+    channel: "😨│evil-parents-and-protectors"
+    describe: >-
+      Adults who should protect kids (parents, teachers, coaches, caretakers) secretly betray them, and how
+      it got exposed or how the kid got out. Told without describing an adult hurting the child.
+      Channel proof: 13 kids trapped by their parents (3.9x), mom killed her 3 kids and women defended her
+      (3.0x, 1,390 comments), waitress saved a boy from his family (3.0x), girl floated 84 hours after the
+      captain killed her family (6.4x).
+    queries:
+      - 'children found locked home parents arrested'
+      - 'kid escaped and called police'
+      - 'waitress noticed boy note'
+      - 'child secret signal saved'
+      - 'teacher arrested students parents shocked'
+      - 'daycare caught on camera arrested'
+      - 'stepmother arrested child'
+  kid-survival:
+    channel: "🌊│kid-survival"
+    describe: >-
+      A KID survives alone against the odds: lost at sea, in a jungle, in the woods, under water or ice.
+      Adult survival stories flop on this channel; it has to be a kid.
+      Channel proof: girl floated alone 84 hours (6.4x), 3 days alone in the sea (2.5x), 40 days in the
+      Amazon (2.0x). Adult desert/lightning/whale stories flopped (0.2-0.3x).
+    queries:
+      - 'girl survived alone days'
+      - 'boy found alive after days'
+      - 'child lost in woods found alive'
+      - 'toddler survived night alone'
+      - 'kid survived at sea'
+      - 'children survived jungle'
+  misjudged-twist:
+    channel: "🔄│everyone-misjudged"
+    describe: >-
+      Everyone thought someone was bad, crazy or lying, and the ending reveals the opposite. The hook is
+      the wrong idea; the payoff flips it.
+      Channel proof: they thought she was a kidnapper (6.2x), every kid he takes home dies (4.9x, he takes
+      in dying kids), hero prisoners "broke out" to save a guard (3.7x), nobody believed her for 25 years (3.7x).
+    queries:
+      - '"nobody believed" girl'
+      - '"nobody believed" boy'
+      - '"thought he was" kidnapper'
+      - '"turned out" stranger kids viral'
+      - '"everyone laughed" until'
+      - 'mistaken for intruder saved'
+      - 'misunderstood neighbor kids'
+  kid-did-the-impossible:
+    channel: "🏆│kid-did-the-impossible"
+    describe: >-
+      A kid does something huge by accident or without getting credit: solves an impossible problem, beats
+      the grown-ups, invents or discovers something, gets stolen credit back.
+      Channel proof: solved the hardest math problem by accident (4.5x, 1,141 comments), made the most famous
+      dance and nobody knew it was her (3.9x), accidentally ran and won the 6-mile race (3.7x).
+    queries:
+      - '"year-old" solved'
+      - 'student solved unsolved problem'
+      - 'kid invented'
+      - 'teen discovered'
+      - 'boy beat adults'
+      - 'kid accidentally discovered'
+      - 'child broke world record'
+      - 'student proved teacher wrong'
+  bully-karma:
+    channel: "🥊│bully-karma-viral-clips"
+    describe: >-
+      Viral clips: bullies, Karens or entitled people get instant karma or a mirror punishment, parents
+      teach a lesson, kids stand up for themselves. Must be real footage, not a skit.
+    queries:
+      - 'bully karma viral video'
+      - 'dad confronts bully viral'
+      - 'mom teaches son lesson viral'
+      - 'kid stands up to bully video'
+      - 'Karen kid viral video'
+      - 'viral TikTok parents punishment'
+      - 'bullied boy surprise school'
+
+# --- extra searches that aren't tied to one lane (viral-news sites) ---
+general_queries:
+  - 'site:dailydot.com TikTok kid'
+  - 'site:boredpanda.com kid'
+  - 'site:newsweek.com viral TikTok'
+  - 'site:indy100.com viral'
+  - 'site:unilad.com kid'
+  - 'site:upworthy.com kid'
+  - 'site:people.com viral video kid'
+  - 'site:nypost.com viral video kid'
+
+# =====================================================================
+# THE WIDE NET: find out what people are searching for, then search all of it
+# =====================================================================
+discover:
+  enabled: true
+  # Google Trends "trending now" (what the most people are searching right now), in these countries.
+  # Every trending story is checked; trends about a kid also become searches of their own for a few days.
+  trends: true
+  trends_geos: all           # every country (the ones Google Trends doesn't cover are skipped by themselves)
+  trend_days: 3
+  # Autocomplete: each seed below is typed into Google and YouTube search, also with a-z after it
+  # ("boy saved a…", "boy saved b…"), and every kid-related suggestion joins the search pool.
+  # That's what real people search for. ~54 lookups per seed; the seeds are worked through a few per run.
+  autocomplete: true
+  youtube_suggest: true
+  alphabet: true
+  seeds_per_run: 12
+  refresh_hours: 20          # after every seed has been looked up, wait this long before starting over
+  workers: 6
+  pause_seconds: 0.2
+  max_pool: 8000             # the most search phrases the pool will hold
+  seeds:                     # add your own: short phrases that real people would start typing
+    unfair-adults: ["student arrested for", "kid arrested for", "girl arrested for", "boy arrested for",
+                    "student suspended for", "kid suspended for", "student expelled for", "kid got in trouble for",
+                    "teacher fired after", "teacher fired for", "school punished student for", "police called on kid",
+                    "karen called police on", "kid banned from", "kid kicked out of", "kid fined for",
+                    "student detention for"]
+    kid-heroes: ["boy saved", "girl saved", "kid saved", "teen saved", "boy saves", "girl saves", "kid saves",
+                 "toddler saved", "year old saves", "student saved", "little sister saved", "little brother saved"]
+    body-mysteries: ["girl born with", "boy born with", "kid allergic to", "girl allergic to", "boy swallowed",
+                     "girl swallowed", "doctors found inside", "rare condition kid", "girl can't feel",
+                     "boy can't stop", "kid diagnosed with rare", "girl cries"]
+    evil-protectors: ["kid escaped from", "child found locked", "kid called 911 on", "girl secret note",
+                      "babysitter caught", "teacher caught on camera", "kid exposed his"]
+    kid-survival: ["boy survived", "girl survived", "kid survived", "toddler survived", "child found alive",
+                   "kid lost in", "boy stranded", "girl lost at sea", "kids survived"]
+    misjudged-twist: ["nobody believed the boy", "nobody believed the girl", "they thought he was",
+                      "everyone laughed at kid", "kid accused of", "kid mistaken for"]
+    kid-did-the-impossible: ["kid solved", "boy invented", "girl invented", "teen discovered", "kid discovered",
+                             "kid built", "boy beat", "kid broke world record", "kid became millionaire",
+                             "kid accidentally"]
+    bully-karma: ["bully gets", "bully karma", "kid stands up to bully", "dad confronts bully", "karen gets",
+                  "entitled parent", "mom teaches son lesson", "bullied kid"]
+
+# --- the whole world: translated searches in 37 languages, each in its own country's Google News + Bing ---
+world:
+  enabled: true
+  languages: all             # or a list, e.g. [es, pt, fr, de, ru, ja]
+  seeds_per_run: 60          # translated searches also typed into Google/YouTube autocomplete in their language
+  extra_queries: {}          # add your own, e.g.  es: ["niño se volvió viral"]   lt: ["vaikas išgelbėjo"]
+  # The AI reads any language and always writes the Discord card in English, with the country on it.
+
+search_pool:                 # every run searches this many pool phrases on Google News AND Bing News
+  queries_per_run: 300       # x 48 runs a day = ~14,000 searches a day per engine; trends and lane searches go first
+  retire_after: 6            # a phrase that found no kid story after this many searches is dropped
+
+# =====================================================================
+# SOURCES (all free)
+# =====================================================================
+sources:
+  google_news:               # searches the pool, last 3 days
+    enabled: true
+    when: 3d
+    per_query: 30
+    workers: 6               # searches at the same time
+    pause_seconds: 0.3
+    max_errors: 30           # if Google keeps refusing, stop for this run instead of wasting time
+  bing:                      # Bing News: different results, and real article links the AI can read
+    enabled: true
+    per_query: 20
+    workers: 6
+    pause_seconds: 0.3
+    max_errors: 30
+  gdelt:                     # news from EVERY country in 65 languages, no key. It searches its English
+    enabled: true            # translation of every article, so these English searches find stories in any language.
+    timespan: 1d
+    max_records: 250
+    queries:                 # GDELT uses its own search syntax (one search every 6 seconds is its limit)
+      - '"viral video" (boy OR girl OR kid OR student)'
+      - '(tiktok OR "went viral") (son OR daughter OR teacher)'
+      - '("year-old boy" OR "year-old girl") (hero OR saved OR bullied OR arrested)'
+      - '("rare condition" OR "rare disease" OR "doctors found") (boy OR girl OR child)'
+      - '(boy OR girl OR child) (saved OR rescued) (brother OR sister OR mother OR father OR classmate)'
+      - '(boy OR girl OR child OR toddler) ("found alive" OR survived) (days OR alone OR lost)'
+      - '(student OR schoolboy OR schoolgirl) (arrested OR suspended OR expelled OR punished)'
+      - '(bullied OR bullying) (student OR boy OR girl) (video OR viral OR revenge)'
+      - '(boy OR girl OR teen OR student) (invented OR discovered OR "world record")'
+      - '(child OR toddler OR boy OR girl) ("pulled from" OR trapped OR stuck) (well OR river OR rubble OR sea)'
+      - '(teacher OR principal OR police) (boy OR girl OR student) (apologized OR fired OR "went viral")'
+      - '(boy OR girl OR child) ("nobody believed" OR "turned out" OR "by accident" OR accidentally)'
+  reddit:
+    enabled: true            # Reddit sometimes blocks cloud servers; it fails safely
+    time: day
+    limit: 25
+    min_upvotes: 3000
+    subreddits: [MadeMeSmile, HumansBeingBros, BeAmazed, nextfuckinglevel, instantkarma, TikTokCringe,
+                 JusticeServed, UpliftingNews, nottheonion, Damnthatsinteresting, interestingasfuck]
+  rss:
+    enabled: true
+    per_feed: 40
+    feeds:
+      - https://www.goodnewsnetwork.org/feed/
+      - https://www.boredpanda.com/feed/
+      - https://www.dailydot.com/feed/
+      - https://nypost.com/tag/viral-videos/feed/
+  youtube:                   # needs a free YOUTUBE_API_KEY: 10,000 units a day = about 90 searches
+    enabled: true
+    searches_per_run: 2      # 48 runs a day x 2, spread over the day; never goes over the free daily amount
+    daily_units: 9000        # leaves a safety margin under the 10,000 limit
+    per_query: 15
+    min_views: 500000
+    published_within_hours: 72
+    queries:                 # searched once a day; the rest of the budget goes to YouTube autocomplete phrases
+      - 'viral video kid'
+      - 'bully karma caught on camera'
+      - 'kid hero'
+      - 'teacher student viral'
+
+# --- the archive digger: walks back month by month through old stories with the lane searches ---
+archive:
+  enabled: true
+  queries_per_run: 30        # Google News searches per run for past months
+  best_pool_queries: 100     # also digs with the pool's 100 best-performing phrases
+  oldest_year: 2008
+  youtube_queries_per_run: 1 # only if YouTube is enabled
