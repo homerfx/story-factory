@@ -1,5 +1,8 @@
 name: Story Factory
 
+on:
+  workflow_dispatch: {}
+
 concurrency:
   group: story-factory
   cancel-in-progress: false
