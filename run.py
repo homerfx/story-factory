@@ -543,8 +543,15 @@ def run_viral(cfg: dict, dry_run: bool = False, http: HTTP | None = None, llm: L
     #    here; only this thread touches the memory file.
     log(f"Run #{run_no} (viral mode): looking for kid stories that already went viral…")
     apify = viral.Apify(http, store, acfg, log)
-    a_plan = viral.plan_apify(store, vcfg, apify.calls_allowed()) if acfg.get("enabled", True) and apify.token else []
-    if acfg.get("enabled", True) and not apify.token:
+    a_plan = []
+    if acfg.get("enabled", True) and apify.token:
+        allowed = apify.calls_allowed()
+        a_plan = viral.plan_apify(store, vcfg, allowed)
+        if not a_plan:
+            used = store.get_meta("apify_used_usd", "?")
+            log(f"  tiktok/instagram: resting this run (today's share of the ${apify.budget:.2f} monthly budget is "
+                f"used; ${used} spent this month)" if allowed <= 0 else "  tiktok/instagram: nothing planned this run")
+    elif acfg.get("enabled", True):
         log("  tiktok/instagram: no APIFY_TOKEN, skipped")
     y_plan = []
     if yt.ready and ycfg.get("enabled", True):
@@ -674,22 +681,38 @@ def run_viral(cfg: dict, dry_run: bool = False, http: HTTP | None = None, llm: L
             log(f"  {ex}; the rest of the research queue waits for the next run")
             break
         researched += 1
+        short = c.title[:60]
         if first is None or (first["real_story"] and first["kid_at_center"] and first["staged_risk"] != "high"
                              and result is None):
             attempts = int(d.get("attempts", 0)) + 1  # unreadable AI reply: one more try next run, then give up
             store.add(c, "deep_pending" if attempts < 2 else "deep_failed", None, {**d, "attempts": attempts})
+            log(f"  research: AI reply unreadable ({'retry next run' if attempts < 2 else 'gave up'}): {short}")
             continue
         if result is None:
-            store.add(c, "rejected", 0, {**d, "why": "not a real story with a kid at the center"})
+            why = ("not a real story" if not first["real_story"] else "no kid at the center"
+                   if not first["kid_at_center"] else "looks staged")
+            store.add(c, "rejected", 0, {**d, "why": why})
+            log(f"  research: dropped ({why}): {short}")
             continue
         if (result.get("same_as") or exclusion.check(result["story"])[0] >= skip
                 or same_story.check(result["story"])[0] >= same_at):
             store.add(c, "already_pitched", result["score"], {**d, **result})
+            log(f"  research: same story as one already posted/picked: {short}")
             continue
         ok = research.passes_pick(result, pick_at)
         lane = result["lane"] if result["lane"] in lanes else "other"
         store.add(c, "ready" if ok else "rejected", result["score"], {**d, **result}, lane=lane)
         picked += ok
+        verdict = "HAND-PICKED" if ok else "rejected"
+        reasons = [] if ok else [r for r, bad in (
+            (f"score {result['score']} < {pick_at}", result["score"] < pick_at),
+            ("no kid at the center", not result["kid_at_center"]),
+            (f"facts not confirmed ({result['verified']})", result["verified"] not in ("yes", "partly")),
+            ("hurts a child", result["child_hurt"]),
+            ("looks staged", result["staged_risk"] == "high"),
+            ("empty story", not result["story"])) if bad]
+        log(f"  research: {verdict} {result['score']}/10" + (f" ({'; '.join(reasons)})" if reasons else "")
+            + f": {result['story'][:90] or short}")
         if ok:
             picked_stories.append(result["story"])
             same_story = Exclusion([], extra_lines=picked_stories)
