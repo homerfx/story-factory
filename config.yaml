@@ -50,7 +50,9 @@ viral:
     enabled: true
     monthly_budget_usd: 4.50 # never spends more than this a month (checked with Apify before every call)
     est_usd_per_call: 0.05   # what one call usually costs, to spread the budget evenly over the month
-    max_usd_per_call: 0.10   # hard cap Apify enforces on each call
+    max_usd_per_call: 0.50   # hard cap Apify enforces on each call (the TikTok actor refuses anything under $0.50;
+                             # a call only costs what it actually scrapes, usually a few cents)
+    max_usd_per_call_ceiling: 1.00  # if an actor demands a higher cap than max_usd_per_call, go up to this, never past
     max_calls_per_run: 2
     timeout_seconds: 150     # a call that takes longer is dropped (keeps the run on time)
     tiktok:
@@ -103,25 +105,29 @@ providers:
   groq:                      # free. Key: https://console.groq.com/keys
     base_url: https://api.groq.com/openai/v1
     key_env: GROQ_API_KEY
-    screen_model: llama-3.1-8b-instant
-    deep_model: llama-3.3-70b-versatile
+    screen_model: openai/gpt-oss-20b     # Groq retired the Llama models for free accounts on 16 Aug 2026
+    deep_model: openai/gpt-oss-120b      # (free tier: 1,000 requests a day per model)
+    extra_body:
+      reasoning_effort: "low"    # gpt-oss "thinks" before answering; low keeps that from eating the reply
   cerebras:                  # free backup. Key: https://cloud.cerebras.ai
     base_url: https://api.cerebras.ai/v1
     key_env: CEREBRAS_API_KEY
-    screen_model: llama3.1-8b
-    deep_model: llama-3.3-70b
+    screen_model: gpt-oss-120b
+    deep_model: gpt-oss-120b
+    extra_body:
+      reasoning_effort: "low"
   gemini:                    # free backup. Key: https://aistudio.google.com/apikey
     base_url: https://generativelanguage.googleapis.com/v1beta/openai
     key_env: GEMINI_API_KEY
-    screen_model: gemini-2.5-flash-lite
-    deep_model: gemini-2.5-flash
+    screen_model: gemini-3.5-flash-lite  # Google closed the 2.5 models to new accounts; 3.5-flash-lite is the cheap one
+    deep_model: gemini-3.8-flash
     extra_body:
-      reasoning_effort: "none"   # stops Gemini's hidden "thinking" from eating the whole reply
+      reasoning_effort: "low"    # keeps Gemini's hidden "thinking" from eating the whole reply
   openrouter:                # free backup (models ending in :free). Key: https://openrouter.ai/keys
     base_url: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
-    screen_model: meta-llama/llama-3.3-70b-instruct:free
-    deep_model: meta-llama/llama-3.3-70b-instruct:free
+    screen_model: nvidia/nemotron-3.5-super-vl:free   # the free Llama slug was retired; this is a current :free model.
+    deep_model: nvidia/nemotron-3.5-super-vl:free     # If it 404s, pick any model ending in :free at openrouter.ai/models
   ollama:                    # free on your own machine (needs Ollama installed); add "ollama" to the list above
     type: ollama
     base_url: http://localhost:11434/v1

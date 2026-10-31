@@ -283,7 +283,9 @@ class Apify:
         self.http, self.store, self.cfg, self.log = http, store, cfg, log
         self.token = os.environ.get("APIFY_TOKEN", "")
         self.budget = float(cfg.get("monthly_budget_usd", 4.5))
-        self.per_call = float(cfg.get("max_usd_per_call", 0.10))  # hard cap Apify enforces on every call
+        self.per_call = float(cfg.get("max_usd_per_call", 0.50))  # hard cap Apify enforces on every call
+        # some actors refuse a cap below their own minimum; the cap may be raised to that minimum, but never past this
+        self.per_call_ceiling = float(cfg.get("max_usd_per_call_ceiling", 1.00))
         self.est_call = float(cfg.get("est_usd_per_call", 0.05))  # what a call usually costs (for pacing)
 
     def _headers(self) -> dict:
@@ -340,6 +342,19 @@ class Apify:
                        headers=self._headers(), timeout=wait)
         if r.status_code == 402 or (r.status_code == 403 and "usage" in (r.text or "").lower()):
             raise ApifyCreditUsedUp("Apify free credit is used up for now")
+        if r.status_code == 400 and "max-total-charge-usd-below-minimum" in (r.text or ""):
+            # this actor wants a higher per-call cap than ours: use its minimum once, if it fits under the ceiling
+            m = re.search(r"\$\s*([0-9]+(?:\.[0-9]+)?)", r.text or "")
+            minimum = float(m.group(1)) if m else self.per_call_ceiling
+            if minimum > self.per_call_ceiling:
+                raise RuntimeError(f"Apify {actor}: wants at least ${minimum:.2f} a call, over the "
+                                   f"${self.per_call_ceiling:.2f} ceiling (max_usd_per_call_ceiling)")
+            self.log(f"  apify: {actor} wants a cap of at least ${minimum:.2f} a call; using that")
+            params["maxTotalChargeUsd"] = f"{minimum:.2f}"
+            r = poster(f"{APIFY_API}/acts/{actor}/run-sync-get-dataset-items", params=params, json=body,
+                       headers=self._headers(), timeout=wait)
+            if r.status_code == 402 or (r.status_code == 403 and "usage" in (r.text or "").lower()):
+                raise ApifyCreditUsedUp("Apify free credit is used up for now")
         if r.status_code >= 400:
             raise RuntimeError(f"Apify {actor}: HTTP {r.status_code} {quiet_error((r.text or '')[:120])}")
         data = r.json()

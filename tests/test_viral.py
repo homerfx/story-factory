@@ -209,7 +209,7 @@ def test_viral():
 
     # Apify: token in the header (checked in post), budget cap passed on, TikTok sorted by most liked
     tk = next(p for p in http.posts if "tiktok" in p[0])
-    assert tk[1]["maxTotalChargeUsd"] == "0.10" and tk[2]["videoSearchSorting"] == "MOST_LIKED", tk
+    assert tk[1]["maxTotalChargeUsd"] == "0.50" and tk[2]["videoSearchSorting"] == "MOST_LIKED", tk
     assert not any("token" in str(p[1]).lower() for p in http.posts), "the token must never go in the address"
     # YouTube: units counted, one fresh + one archive search
     searches = [c for c in http.calls if "youtube/v3/search" in c[0]]
