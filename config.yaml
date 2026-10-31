@@ -1,6 +1,71 @@
 # ===================== Story Factory settings =====================
 # Edit freely. Lines starting with # are notes.
 
+# viral = ONLY kid stories that already went viral on YouTube, TikTok and Instagram, researched online and
+#         hand-picked against your channel's 50 most-viewed videos (the "viral:" section right below).
+# news  = the old wide net: news sites, Google Trends, Reddit, GDELT, 37 languages (everything further down).
+mode: viral
+
+viral:
+  channel_handle: "@tylerrstories"   # your channel: its top 50 videos are what every story is compared with
+  top_n: 50
+  watch_channels: ["@onca_yt"]       # stories these channels already posted are skipped (and their videos too)
+  min_views: 1000000                 # "proven viral": at least this many views (TikTok/Instagram plays too)
+  # Every search is built on kid/child. On its own, "kid" only finds nursery rhymes, toy channels and trailers,
+  # so each one is paired with a story word.
+  keywords:
+    - kid story
+    - kid true story
+    - this kid
+    - kid saved
+    - kid survived
+    - kid hero
+    - kid arrested
+    - kid caught on camera
+    - kid doctors
+    - kid bullied
+    - kid teacher
+    - kid went viral
+    - child story
+    - child true story
+    - this child
+    - child saved
+    - child survived
+  screen_threshold: 6        # quick AI look (0-10) needed before the deep research
+  max_screen_per_run: 150
+  max_research_per_run: 8    # stories researched online per run (each takes ~30 seconds)
+  articles_to_read: 2        # full articles read per story
+  read_comments: true        # YouTube: read the top 20 comments (they often say what really happened)
+  pick_threshold: 9          # only 9-10/10 stories are posted: the hand-picked ones
+  max_posts_per_run: 10
+  youtube:                   # needs YOUTUBE_API_KEY (free: 10,000 units a day = ~85 searches)
+    enabled: true
+    searches_per_run: 2      # one for the last 30 days, one walking back through the years
+    window_months: 3         # the walk back goes 3 months at a time
+    fresh_every_hours: 48    # each keyword's "last 30 days" search repeats at most this often (sooner = same videos)
+    oldest_year: 2010
+    daily_units: 9000        # stays under the free 10,000
+    language: en
+  apify:                     # TikTok + Instagram. Needs APIFY_TOKEN (free plan: $5 a month, no card)
+    enabled: true
+    monthly_budget_usd: 4.50 # never spends more than this a month (checked with Apify before every call)
+    est_usd_per_call: 0.05   # what one call usually costs, to spread the budget evenly over the month
+    max_usd_per_call: 0.10   # hard cap Apify enforces on each call
+    max_calls_per_run: 2
+    timeout_seconds: 150     # a call that takes longer is dropped (keeps the run on time)
+    tiktok:
+      enabled: true
+      weight: 2              # TikTok gets 2 calls for every 1 Instagram call
+      actor: clockworks~tiktok-scraper
+      results_per_call: 25   # TikTok's most-liked videos for the keyword
+      date_filters: [PAST_MONTH, LAST_3_MONTHS, LAST_6_MONTHS, ALL_TIME]
+    instagram:
+      enabled: true
+      weight: 1
+      actor: apify~instagram-search-scraper
+      results_per_call: 25   # Instagram's popular reels for the keyword
+      min_likes: 50000       # if Instagram hides the view count, this many likes counts as viral
+
 timezone: Europe/Vilnius
 loop_minutes: 30            # minutes between runs on a server or your PC (GitHub uses the schedule in its workflow file)
 run_budget_minutes: 12      # each run stops itself after this long, so runs (every 30 min on GitHub) never pile up

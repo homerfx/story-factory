@@ -71,14 +71,16 @@ def prefilter(c: Candidate) -> tuple[bool, int, str]:
 class Exclusion:
     """Fuzzy match against the list of stories already pitched (data/exclude.txt + data/posted.txt)."""
 
-    def __init__(self, paths: list[str]) -> None:
+    def __init__(self, paths: list[str], extra_lines=()) -> None:
         self.segments: list[tuple[str, set[str]]] = []
+        sources = [list(extra_lines)]
         for path in paths:
             try:
                 with open(path, encoding="utf-8") as f:
-                    lines = f.read().splitlines()
+                    sources.append(f.read().splitlines())
             except FileNotFoundError:
                 continue
+        for lines in sources:
             for line in lines:
                 if not line.strip() or line.startswith("#"):
                     continue

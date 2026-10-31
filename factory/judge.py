@@ -74,7 +74,8 @@ def taste_text(liked: list[dict], disliked: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def screen(llm: LLM, cands: list[Candidate], batch_size: int, log, deadline: float | None = None) -> None:
+def screen(llm: LLM, cands: list[Candidate], batch_size: int, log, deadline: float | None = None,
+           system: str = SCREEN_SYSTEM) -> None:
     """Sets c.screen_score on each candidate it managed to score (others stay None)."""
     for start in range(0, len(cands), batch_size):
         if deadline is not None and time.time() > deadline:
@@ -87,7 +88,7 @@ def screen(llm: LLM, cands: list[Candidate], batch_size: int, log, deadline: flo
             snippet = f"\n    {c.summary[:200]}" if c.summary else ""
             lines.append(f"[{i}] {c.title}\n    source: {c.source}{extra}{snippet}")
         try:
-            reply = llm.complete("screen", SCREEN_SYSTEM, "\n".join(lines), max_tokens=40 * len(batch) + 100)
+            reply = llm.complete("screen", system, "\n".join(lines), max_tokens=40 * len(batch) + 100)
             for row in parse_json(reply).get("results", []):
                 n = int(row.get("n", 0))
                 if 1 <= n <= len(batch):

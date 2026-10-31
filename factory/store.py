@@ -99,6 +99,34 @@ class Store:
         self.db.commit()
         return cur.rowcount > 0
 
+    def research_queue(self, limit: int, max_age_days: int = 30) -> list[dict]:
+        """Viral mode's research queue: best quick-look score first, then the most-viewed video (when two videos
+        tell the same story, the bigger one gets researched and picked first)."""
+        return self._rows(
+            "SELECT * FROM items WHERE status='deep_pending' AND updated>=? "
+            "ORDER BY score DESC, CAST(json_extract(data, '$.signal_value') AS INTEGER) DESC, updated DESC LIMIT ?",
+            (time.time() - max_age_days * 86400, limit),
+        )
+
+    def park_non_viral(self) -> int:
+        """Viral mode: stories the news mode left waiting have no proof they went viral, so they're set aside."""
+        cur = self.db.execute(
+            "UPDATE items SET status='news_parked' WHERE status IN ('screen_pending','deep_pending','ready') "
+            "AND (data IS NULL OR data NOT LIKE '%\"platform\": \"%' OR data LIKE '%\"platform\": \"\"%')")
+        self.db.commit()
+        return cur.rowcount
+
+    def recent_stories(self, days: int = 60) -> list[str]:
+        """The one-line stories of everything picked or posted lately (to skip a second video of the same story)."""
+        rows = self.db.execute("SELECT data FROM items WHERE status IN ('ready','posted') AND updated>=?",
+                               (time.time() - days * 86400,))
+        out = []
+        for (data,) in rows:
+            story = (json.loads(data or "{}") or {}).get("story") or ""
+            if story:
+                out.append(story)
+        return out
+
     def recent_titles(self, days: int = 14) -> list[str]:
         rows = self.db.execute("SELECT title FROM items WHERE first_seen>=? AND title IS NOT NULL",
                                (time.time() - days * 86400,))

@@ -173,7 +173,17 @@ def _cut(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+_SAFE_LINK = re.compile(r"^https?://[^\s<>()\[\]]+$")
+PLATFORMS = {"youtube": "YouTube", "tiktok": "TikTok", "instagram": "Instagram"}
+
+
 def build_card(item: dict, cfg: dict, note: str = "") -> dict:
+    # The fact-check link was picked by the factory from its own search results (never written by the AI), so it is
+    # the one extra link allowed on a card, and only if it's a plain web address.
+    fact_link = str((item.get("data") or {}).get("source_url") or "")
+    fact_link = fact_link if _SAFE_LINK.match(fact_link) else ""
+    if item.get("url") and not _SAFE_LINK.match(str(item["url"])):
+        item = {**item, "url": ""}
     r = {k: _plain(v) for k, v in (item.get("data") or {}).items()}
     item = {**item, **{k: _plain(item.get(k)) for k in ("title", "signal", "possibly_pitched", "source")}}
     lanes = list((cfg.get("lanes") or {}).keys())
@@ -191,7 +201,8 @@ def build_card(item: dict, cfg: dict, note: str = "") -> dict:
         ("Payoff", r.get("payoff")),
         ("Hook idea", r.get("hook_idea")),
         ("Why they'll comment", r.get("comment_bait")),
-        ("Link", item.get("url")),
+        ("Video" if r.get("platform") else "Link", item.get("url")),
+        ("Fact check", fact_link),
     ]
     description = "\n".join(f"**{k}:** {v}" for k, v in lines if v)
     if r.get("score", 0) >= cfg.get("top_threshold", 9):
@@ -202,14 +213,22 @@ def build_card(item: dict, cfg: dict, note: str = "") -> dict:
         {"name": "Score", "value": f"{r.get('score', '?')}/10", "inline": True},
         {"name": "Lane", "value": lane_label(cfg, lane), "inline": True},
         {"name": "Emotion", "value": _cut(r.get("emotion") or "-", 1024), "inline": True},
-        {"name": "Type", "value": "Viral clip" if r.get("is_viral_clip") else "News story", "inline": True},
+        {"name": "Type", "value": (f"{PLATFORMS.get(r['platform'], r['platform'])} · "
+                                   + ("real footage" if r.get("is_viral_clip") else "retold"))
+         if r.get("platform") else ("Viral clip" if r.get("is_viral_clip") else "News story"), "inline": True},
         {"name": "Staged risk", "value": r.get("staged_risk") or "-", "inline": True},
         {"name": "Found", "value": "Archive (older story)" if item.get("archive") else "Fresh", "inline": True},
     ]
     if r.get("country"):
         fields.append({"name": "Country", "value": _cut(r["country"], 100), "inline": True})
     if item.get("signal"):
-        fields.append({"name": "Popularity", "value": _cut(item["signal"], 1024), "inline": True})
+        fields.append({"name": "Proof it went viral" if r.get("platform") else "Popularity",
+                       "value": _cut(item["signal"], 1024), "inline": True})
+    if r.get("verified"):
+        fields.append({"name": "Facts checked", "value": {"yes": "✅ confirmed", "partly": "🟡 partly confirmed"}.get(
+            r["verified"], "❌ not confirmed"), "inline": True})
+    if r.get("most_like"):
+        fields.append({"name": "Most like your video", "value": _cut(r["most_like"], 1024), "inline": False})
     if flags:
         fields.append({"name": "⚠️ Check", "value": _cut(" · ".join(flags), 1024), "inline": False})
     return {
