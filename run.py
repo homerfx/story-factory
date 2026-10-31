@@ -573,27 +573,43 @@ def run_viral(cfg: dict, dry_run: bool = False, http: HTTP | None = None, llm: L
     skip = cfg.get("pitched_skip_strength", 0.75)
     titles = TitleIndex(store.recent_titles(30))  # re-uploads of the same clip usually keep its title
     passed, batch_ids = [], set()
+    why: dict[str, int] = {}
+
+    def drop(c: Candidate, reason: str, detail: str = "") -> None:
+        why[reason] = why.get(reason, 0) + 1
+        log(f"  skipped ({reason}{': ' + detail if detail else ''}): {c.title[:70]}")
+
     for c in sorted(found, key=lambda c: c.signal_value, reverse=True):
-        if not c.title or not c.url or c.id in batch_ids or store.seen(c.id):
+        if not c.title or not c.url or c.id in batch_ids:
             continue
         batch_ids.add(c.id)
+        if store.seen(c.id):
+            drop(c, "seen before")
+            continue
         if titles.is_duplicate(c.title):
             store.add(c, "duplicate", light=True, commit=False)
+            drop(c, "duplicate title")
             continue
         titles.add(c.title)
         text = f"{c.title} {c.summary[:300]}"
-        if BLOCK.search(text) or viral.JUNK.search(c.title):
+        hit = BLOCK.search(text) or viral.JUNK.search(c.title)
+        if hit:
             store.add(c, "filtered:junk", light=True, commit=False)
+            drop(c, "junk word", hit.group(0))
             continue
         strength, line = exclusion.check(text)
         if strength >= skip:
             store.add(c, "already_pitched", light=True, commit=False)
+            drop(c, "already posted", (line or "")[:50])
             continue
         if strength >= 0.5:
             c.possibly_pitched = line
         passed.append(c)
     store.commit()
     report["new"] = report["passed_filter"] = len(passed)
+    if found:
+        log(f"  new this run: {len(passed)} of {len(found)} go to the AI"
+            + (f" ({', '.join(f'{v} {k}' for k, v in why.items())})" if why else ""))
     for row in store.screen_pending(int(vcfg.get("max_screen_per_run", 150))):
         passed.append(_viral_candidate(row))
 
@@ -609,6 +625,10 @@ def run_viral(cfg: dict, dry_run: bool = False, http: HTTP | None = None, llm: L
         log(f"  {ex}")
     threshold = int(vcfg.get("screen_threshold", 6))
     screened = [c for c in to_screen if c.screen_score is not None]
+    if not to_screen:
+        log("  nothing new to screen this run")
+    elif ai_ok and not screened:
+        log(f"  the AI answered but gave no scores for {len(to_screen)} videos (check the model names in config.yaml)")
     for c in screened:
         store.add(c, "deep_pending" if c.screen_score >= threshold else "screened", c.screen_score, _viral_data(c),
                   commit=False)
